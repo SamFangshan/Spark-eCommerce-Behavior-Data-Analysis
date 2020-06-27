@@ -51,7 +51,7 @@ object Analysis {
         |	ecommerce e
         |GROUP BY
         |	DATE(event_time)
-  """.stripMargin.replaceAll("//[\\d]+", "")
+  """.stripMargin
     val totalDf = spark.sql(sql)
 
     totalDf.coalesce(1).write.csv("exploreTotalEventsEachDay/eventsAggByDay.csv")
@@ -87,7 +87,7 @@ object Analysis {
         |GROUP BY
         | user_id,
         |	DATE(event_time)
-  """.stripMargin.replaceAll("//[\\d]+", "")
+  """.stripMargin
     val tempViewDf = spark.sql(sqlTempView)
     tempViewDf.createOrReplaceTempView("daily_events")
 
@@ -106,7 +106,7 @@ object Analysis {
         |		daily_events) AS foo
         |WHERE
         |	rank = 1
-    """.stripMargin.replaceAll("//[\\d]+", "")
+    """.stripMargin
 
     def computeAndSave(fieldName: String, filename: String): Unit = {
       val sql = sqlTemplate.format(fieldName)
