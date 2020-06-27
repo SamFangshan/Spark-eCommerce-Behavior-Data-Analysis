@@ -54,6 +54,8 @@ object Analysis {
   """.stripMargin.replaceAll("//[\\d]+", "")
     val totalDf = spark.sql(sql)
 
+    totalDf.coalesce(1).write.csv("exploreTotalEventsEachDay/eventsAggByDay.csv")
+
     def computeAndSave(fieldIndex: Int, filename: String): Unit = {
       val totalHist = totalDf.rdd.map(_.getLong(fieldIndex)).histogram(50)
       saveHistToFile(totalHist, filename)
