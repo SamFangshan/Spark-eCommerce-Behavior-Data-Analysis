@@ -24,6 +24,7 @@ object Analysis {
     exploreTotalEventsEachDay(df)
     exploreUsersWithMaxEvents(df)
     exploreMostActiveUsers(df)
+    exploreTurnoverPerDay(df)
   }
 
   def saveHistToFile(hist: (Array[Double], Array[Long]), filename: String): Unit = {
@@ -151,6 +152,26 @@ object Analysis {
     computeAndSave("num_remove_from_carts", "'remove_from_cart'", "exploreMostActiveUsers/topUserRemoveFromCartResult.csv")
     computeAndSave("num_purchases", "'purchase'", "exploreMostActiveUsers/topUserPurchaseResult.csv")
     computeAndSave("num_events", "event_type", "exploreMostActiveUsers/topUserEventResult.csv")
+  }
+
+  def exploreTurnoverPerDay(df: DataFrame): Unit = {
+    val sql =
+      """
+        |SELECT
+        |	SUM(price) AS turnover,
+        |	DATE(event_time) AS date
+        |FROM
+        |	ecommerce
+        |WHERE
+        |	event_type = 'purchase'
+        |GROUP BY
+        |	DATE(event_time)
+    """.stripMargin
+    val turnoverDf = spark.sql(sql)
+
+    turnoverDf.coalesce(1).write.csv("exploreTurnoverPerDay/turnoverAggByDay.csv")
+    val turnoverHist = turnoverDf.rdd.map(_.getDouble(0)).histogram(50)
+    saveHistToFile(turnoverHist, "exploreTurnoverPerDay/turnoverPerDayHist.txt")
   }
 
 }
