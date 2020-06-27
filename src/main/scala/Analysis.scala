@@ -58,8 +58,15 @@ object Analysis {
     totalDf.coalesce(1).write.csv("exploreTotalEventsEachDay/eventsAggByDay.csv")
 
     def computeAndSave(fieldIndex: Int, filename: String): Unit = {
-      val totalHist = totalDf.rdd.map(_.getLong(fieldIndex)).histogram(50)
-      saveHistToFile(totalHist, filename)
+      val bucketCount = 50
+      val columnData = totalDf.rdd.map(_.getLong(fieldIndex)).persist()
+      val maxNumEvents = columnData.max()
+      val avgBinWidth = maxNumEvents / bucketCount
+      val buckets = ((0.asInstanceOf[Long] until maxNumEvents by avgBinWidth) :+ maxNumEvents)
+        .map(_.asInstanceOf[Double])
+        .toArray
+      val totalHist = columnData.histogram(buckets)
+      saveHistToFile((buckets, totalHist), filename)
     }
 
     computeAndSave(0, "exploreTotalEventsEachDay/totalViewsHist.txt")
