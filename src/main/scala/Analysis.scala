@@ -25,11 +25,11 @@ object Analysis {
     df.createOrReplaceTempView("ecommerce")
 
     exploreTotalEvents(df)
-//    exploreUsersWithMaxEvents(df)
-//    exploreMostActiveUsers(df)
+    exploreUsersWithMaxEvents(df)
+    exploreMostActiveUsers(df)
     exploreTurnover(df)
-//    exploreUsersWithMaxSpending(df)
-//    exploreMostGenerousUsers(df)
+    exploreUsersWithMaxSpending(df)
+    exploreMostGenerousUsers(df)
   }
 
   def toCamel(s: String): String = {
@@ -62,6 +62,7 @@ object Analysis {
         |	DATE(event_time)
   """.stripMargin.format(dailySumStatements.mkString(""), event_types(4))
     val dailyDf = spark.sql(dailySql)
+    dailyDf.persist()
 
     dailyDf.coalesce(1).write.csv("%s/eventsAggByDay.csv".format(functionName))
 
@@ -93,6 +94,8 @@ object Analysis {
         |	EXTRACT(MONTH FROM date)
     """.stripMargin.format(monthlySumStatements.mkString(""))
     val monthlyDf = spark.sql(monthlySql)
+    monthlyDf.persist()
+
     monthlyDf.coalesce(1).write.csv("%s/eventsAggByMonth.csv".format(functionName))
 
     monthlyDf.createOrReplaceTempView("agg_by_month")
@@ -130,6 +133,7 @@ object Analysis {
         |	DATE(event_time)
     """.stripMargin.format(dailySumStatements.mkString(""), event_types(4))
     val dailyTempViewDf = spark.sql(sqlDailyTempView)
+    dailyTempViewDf.persist()
     dailyTempViewDf.createOrReplaceTempView("daily_events")
 
     val monthlySumStatements = event_types.map(e => "SUM(num_%ss) AS num_%ss,\n".format(e, e))
@@ -146,6 +150,7 @@ object Analysis {
         |	EXTRACT(MONTH FROM date)
     """.stripMargin.format(monthlySumStatements.mkString(""))
     val monthlyTempViewDf = spark.sql(sqlMonthlyTempView)
+    monthlyTempViewDf.persist()
     monthlyTempViewDf.createOrReplaceTempView("monthly_events")
 
     val sqlTemplate =
@@ -226,6 +231,7 @@ object Analysis {
         |	DATE(event_time)
     """.stripMargin
     val dailyTurnoverDf = spark.sql(dailySql)
+    dailyTurnoverDf.persist()
 
     dailyTurnoverDf.coalesce(1).write.csv("%s/turnoverAggByDay.csv".format(functionName))
     val turnoverHist = dailyTurnoverDf.rdd.map(_.getDouble(0)).histogram(20)
@@ -244,6 +250,8 @@ object Analysis {
         |	EXTRACT(MONTH FROM date)
       """.stripMargin
     val monthlyTurnoverDf = spark.sql(monthlySql)
+    monthlyTurnoverDf.persist()
+
     monthlyTurnoverDf.coalesce(1).write.csv("%s/turnoverAggByMonth.csv".format(functionName))
 
     monthlyTurnoverDf.createOrReplaceTempView("agg_by_month")
@@ -279,6 +287,7 @@ object Analysis {
         |	DATE(event_time)
     """.stripMargin
     val dailyTempViewDf = spark.sql(sqlDailyTempView)
+    dailyTempViewDf.persist()
     dailyTempViewDf.createOrReplaceTempView("daily_spending")
 
     val sqlMonthlyTempView =
