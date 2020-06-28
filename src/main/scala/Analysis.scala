@@ -1,5 +1,6 @@
 import java.io.{BufferedWriter, File, FileWriter}
 
+import com.google.common.base.CaseFormat
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{col, substring, to_timestamp}
@@ -14,6 +15,8 @@ object Analysis {
 
   val sc: SparkContext = spark.sparkContext
 
+  val event_types = Array("view", "cart", "remove_from_cart", "purchase", "event")
+
   def main(args: Array[String]): Unit = {
     val df: DataFrame = spark.read.options(Map("header" -> "true", "inferSchema" -> "true")).csv("data/2019-Dec.csv")
       .withColumn("event_time", substring(col("event_time"), 0, 19))
@@ -21,10 +24,14 @@ object Analysis {
 
     df.createOrReplaceTempView("ecommerce")
 
-//    exploreTotalEvents(df)
+    exploreTotalEvents(df)
     exploreUsersWithMaxEvents(df)
-//    exploreMostActiveUsers(df)
-//    exploreTurnover(df)
+    exploreMostActiveUsers(df)
+    exploreTurnover(df)
+  }
+
+  def toCamel(s: String): String = {
+    CaseFormat.LOWER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, s)
   }
 
   def saveHistToFile(hist: (Array[Double], Array[Long]), filename: String): Unit = {
@@ -39,26 +46,25 @@ object Analysis {
   Total number of views, cart, remove_from_cart, purchase, all events of all users per day & per month
    */
   def exploreTotalEvents(df: DataFrame): Unit = {
+    val functionName = "exploreTotalEvents"
+    val dailySumStatements = event_types.take(4).map(e => "SUM(CASE WHEN event_type = '%s' THEN 1 ELSE 0 END) AS num_%ss,\n".format(e, e))
     val dailySql =
       """
         |SELECT
-        |	SUM(CASE WHEN event_type = 'view' THEN 1 ELSE 0 END) AS num_views,
-        |	SUM(CASE WHEN event_type = 'cart' THEN 1 ELSE 0 END) AS num_carts,
-        |	SUM(CASE WHEN event_type = 'remove_from_cart' THEN 1 ELSE 0 END) AS num_remove_from_carts,
-        |	SUM(CASE WHEN event_type = 'purchase' THEN 1 ELSE 0 END) AS num_purchases,
-        | COUNT(event_type) AS num_events,
+        |	%s
+        | COUNT(event_type) AS num_%ss,
         |	DATE(event_time) AS date
         |FROM
         |	ecommerce
         |GROUP BY
         |	DATE(event_time)
-  """.stripMargin
+  """.stripMargin.format(dailySumStatements.mkString(""), event_types(4))
     val dailyDf = spark.sql(dailySql)
 
-    dailyDf.coalesce(1).write.csv("exploreTotalEvents/eventsAggByDay.csv")
+    dailyDf.coalesce(1).write.csv("%s/eventsAggByDay.csv".format(functionName))
 
     def computeAndSave(fieldIndex: Int, filename: String): Unit = {
-      val bucketCount = 50
+      val bucketCount = 20
       val columnData = dailyDf.rdd.map(_.getLong(fieldIndex)).persist()
       val maxNumEvents = columnData.max()
       val avgBinWidth = maxNumEvents / bucketCount
@@ -69,44 +75,36 @@ object Analysis {
       saveHistToFile((buckets, totalHist), filename)
     }
 
-    computeAndSave(0, "exploreTotalEvents/totalViewsHist.txt")
-    computeAndSave(1, "exploreTotalEvents/totalCartsHist.txt")
-    computeAndSave(2, "exploreTotalEvents/totalRemoveFromCartsHist.txt")
-    computeAndSave(3, "exploreTotalEvents/totalPurchasesHist.txt")
-    computeAndSave(4, "exploreTotalEvents/totalEventsHist.txt")
+    event_types.indices.foreach(i => computeAndSave(i, "%s/total%ssHist.txt".format(functionName, toCamel(event_types(i)))))
 
     dailyDf.createOrReplaceTempView("agg_by_day")
 
+    val monthlySumStatements = event_types.map(e => "SUM(num_%ss) AS num_%ss,\n".format(e, e))
     val monthlySql =
       """
         |SELECT
-        |	SUM(num_views) AS num_views,
-        | SUM(num_carts) AS num_carts,
-        | SUM(num_remove_from_carts) AS num_remove_from_carts,
-        | SUM(num_purchases) AS num_purchases,
-        | SUM(num_events) AS num_events,
+        |	%s
         |	EXTRACT(MONTH FROM date) AS month
         |FROM
         |	agg_by_day
         |GROUP BY
         |	EXTRACT(MONTH FROM date)
-    """.stripMargin
+    """.stripMargin.format(monthlySumStatements.mkString(""))
     val monthlyTurnoverDf = spark.sql(monthlySql)
-    monthlyTurnoverDf.coalesce(1).write.csv("exploreTotalEvents/eventsAggByMonth.csv")
+    monthlyTurnoverDf.coalesce(1).write.csv("%s/eventsAggByMonth.csv".format(functionName))
   }
 
   /*
   User with maximum number of views, cart, remove_from_cart, purchase, all events of each day & each month
    */
   def exploreUsersWithMaxEvents(df: DataFrame): Unit = {
+    val functionName = "exploreUsersWithMaxEvents"
+    val dailySumStatements = event_types.take(4).map(e => "SUM(CASE WHEN event_type = '%s' THEN 1 ELSE 0 END) AS num_%ss,\n".format(e, e))
     val sqlDailyTempView =
       """
         |SELECT
-        |	SUM(CASE WHEN event_type = 'view' THEN 1 ELSE 0 END) AS num_views,
-        |	SUM(CASE WHEN event_type = 'cart' THEN 1 ELSE 0 END) AS num_carts,
-        |	SUM(CASE WHEN event_type = 'remove_from_cart' THEN 1 ELSE 0 END) AS num_remove_from_carts,
-        |	SUM(CASE WHEN event_type = 'purchase' THEN 1 ELSE 0 END) AS num_purchases,
-        | COUNT(event_type) AS num_events,
+        |	%s
+        | COUNT(event_type) AS num_%ss,
         | user_id,
         |	DATE(event_time) AS date
         |FROM
@@ -114,18 +112,15 @@ object Analysis {
         |GROUP BY
         | user_id,
         |	DATE(event_time)
-    """.stripMargin
+    """.stripMargin.format(dailySumStatements.mkString(""), event_types(4))
     val dailyTempViewDf = spark.sql(sqlDailyTempView)
     dailyTempViewDf.createOrReplaceTempView("daily_events")
 
+    val monthlySumStatements = event_types.map(e => "SUM(num_%ss) AS num_%ss,\n".format(e, e))
     val sqlMonthlyTempView =
       """
         |SELECT
-        |	SUM(num_views) AS num_views,
-        | SUM(num_carts) AS num_carts,
-        | SUM(num_remove_from_carts) AS num_remove_from_carts,
-        | SUM(num_purchases) AS num_purchases,
-        | SUM(num_events) AS num_events,
+        |	%s
         | user_id,
         |	EXTRACT(MONTH FROM date) AS month
         |FROM
@@ -133,7 +128,7 @@ object Analysis {
         |GROUP BY
         | user_id,
         |	EXTRACT(MONTH FROM date)
-    """.stripMargin
+    """.stripMargin.format(monthlySumStatements.mkString(""))
     val monthlyTempViewDf = spark.sql(sqlMonthlyTempView)
     monthlyTempViewDf.createOrReplaceTempView("monthly_events")
 
@@ -163,17 +158,8 @@ object Analysis {
       resultDf.coalesce(1).write.csv(filename)
     }
 
-    computeAndSave("num_views", "exploreUsersWithMaxEvents/topUserViewPerDayResult.csv", true)
-    computeAndSave("num_carts", "exploreUsersWithMaxEvents/topUserCartPerDayResult.csv", true)
-    computeAndSave("num_remove_from_carts", "exploreUsersWithMaxEvents/topUserRemoveFromCartPerDayResult.csv", true)
-    computeAndSave("num_purchases", "exploreUsersWithMaxEvents/topUserPurchasePerDayResult.csv", true)
-    computeAndSave("num_events", "exploreUsersWithMaxEvents/topUserEventPerDayResult.csv", true)
-
-    computeAndSave("num_views", "exploreUsersWithMaxEvents/topUserViewPerMonthResult.csv", false)
-    computeAndSave("num_carts", "exploreUsersWithMaxEvents/topUserCartPerMonthResult.csv", false)
-    computeAndSave("num_remove_from_carts", "exploreUsersWithMaxEvents/topUserRemoveFromCartPerMonthResult.csv", false)
-    computeAndSave("num_purchases", "exploreUsersWithMaxEvents/topUserPurchasePerMonthResult.csv", false)
-    computeAndSave("num_events", "exploreUsersWithMaxEvents/topUserEventPerMonthResult.csv", false)
+    event_types.foreach(e => computeAndSave("num_%ss".format(e), "%s/topUser%sPerDayResult.csv".format(functionName, toCamel(e)), true))
+    event_types.foreach(e => computeAndSave("num_%ss".format(e), "%s/topUser%sPerMonthResult.csv".format(functionName, toCamel(e)), false))
 
   }
 
@@ -181,6 +167,7 @@ object Analysis {
   Users with top 5 numbers of views, cart, remove_from_cart, purchase, all events over the period
    */
   def exploreMostActiveUsers(df: DataFrame): Unit = {
+    val functionName = "exploreMostActiveUsers"
     val sqlTemplate =
       """
         |SELECT
@@ -201,17 +188,15 @@ object Analysis {
       resultDf.coalesce(1).write.csv(filename)
     }
 
-    computeAndSave("num_views", "'view'", "exploreMostActiveUsers/topUserViewResult.csv")
-    computeAndSave("num_carts", "'cart'", "exploreMostActiveUsers/topUserCartResult.csv")
-    computeAndSave("num_remove_from_carts", "'remove_from_cart'", "exploreMostActiveUsers/topUserRemoveFromCartResult.csv")
-    computeAndSave("num_purchases", "'purchase'", "exploreMostActiveUsers/topUserPurchaseResult.csv")
-    computeAndSave("num_events", "event_type", "exploreMostActiveUsers/topUserEventResult.csv")
+    event_types.take(4).foreach(e => computeAndSave("num_%ss".format(e), "'%s'".format(e), "%s/topUser%sResult.csv".format(functionName, toCamel(e))))
+    computeAndSave("num_events", "event_type", "%s/topUserEventResult.csv".format(functionName))
   }
 
   /*
   Explore daily and monthly turnovers
    */
   def exploreTurnover(df: DataFrame): Unit = {
+    val functionName = "exploreTurnover"
     val dailySql =
       """
         |SELECT
@@ -226,9 +211,9 @@ object Analysis {
     """.stripMargin
     val dailyTurnoverDf = spark.sql(dailySql)
 
-    dailyTurnoverDf.coalesce(1).write.csv("exploreTurnover/turnoverAggByDay.csv")
-    val turnoverHist = dailyTurnoverDf.rdd.map(_.getDouble(0)).histogram(50)
-    saveHistToFile(turnoverHist, "exploreTurnover/turnoverPerDayHist.txt")
+    dailyTurnoverDf.coalesce(1).write.csv("%s/turnoverAggByDay.csv".format(functionName))
+    val turnoverHist = dailyTurnoverDf.rdd.map(_.getDouble(0)).histogram(20)
+    saveHistToFile(turnoverHist, "%s/turnoverPerDayHist.txt".format(functionName))
 
     dailyTurnoverDf.createOrReplaceTempView("agg_by_day")
 
@@ -243,7 +228,7 @@ object Analysis {
         |	EXTRACT(MONTH FROM date)
       """.stripMargin
     val monthlyTurnoverDf = spark.sql(monthlySql)
-    monthlyTurnoverDf.coalesce(1).write.csv("exploreTurnover/turnoverAggByMonth.csv")
+    monthlyTurnoverDf.coalesce(1).write.csv("%s/turnoverAggByMonth.csv".format(functionName))
   }
 
 }
