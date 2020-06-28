@@ -6,7 +6,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame) {
   df.createOrReplaceTempView("ecommerce")
 
-  val event_types = Array("view", "cart", "remove_from_cart", "purchase", "event")
+  private val event_types = Array("view", "cart", "remove_from_cart", "purchase", "event")
 
   private def toCamel(s: String): String = {
     CaseFormat.LOWER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, s)
