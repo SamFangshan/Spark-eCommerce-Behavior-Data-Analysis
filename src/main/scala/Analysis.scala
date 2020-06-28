@@ -2,7 +2,7 @@ import java.io.{BufferedWriter, File, FileWriter}
 
 import com.google.common.base.CaseFormat
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, substring, to_timestamp}
 
 object Analysis {
@@ -24,12 +24,13 @@ object Analysis {
 
     df.createOrReplaceTempView("ecommerce")
 
-    exploreTotalEvents(df)
-    exploreUsersWithMaxEvents(df)
-    exploreMostActiveUsers(df)
-    exploreTurnover(df)
-    exploreUsersWithMaxSpending(df)
-    exploreMostGenerousUsers(df)
+//    exploreTotalEvents(df)
+//    exploreUsersWithMaxEvents(df)
+//    exploreMostActiveUsers(df)
+//    exploreTurnover(df)
+//    exploreUsersWithMaxSpending(df)
+//    exploreMostGenerousUsers(df)
+    explorePopularProducts(df)
   }
 
   def toCamel(s: String): String = {
@@ -360,5 +361,85 @@ object Analysis {
     resultDf.coalesce(1).write.csv("%s/topUserSpendingResult.csv".format(functionName))
   }
 
+  /*
+  Determine the mostly purchased popular products (top 50) & brands (top 20) & categories (top 10) per month & over the period
+   */
+  def explorePopularProducts(df: DataFrame): Unit = {
+    val functionName = "explorePopularProducts"
+    val columns = Array("product_id", "brand", "category_code")
+    val topNums = Array(50, 20, 10)
+    val checkNullSql =
+      """
+        |SELECT
+        |	COUNT(*)
+        |FROM
+        |	ecommerce
+        |WHERE
+        |	%s IS NULL
+      """.stripMargin
+    val numsOfNulls = columns.map(c => spark.sql(checkNullSql.format(c)).rdd.collect().head.getLong(0))
+
+    val sqlMonthlyTempView =
+      """
+        |SELECT
+        |	COUNT(product_id) AS purchase_count,
+        |	%s,
+        |	EXTRACT(MONTH FROM event_time) AS MONTH
+        |FROM
+        |	ecommerce
+        |WHERE
+        |	event_type = 'purchase'
+        |	AND %s IS NOT NULL
+        |GROUP BY
+        | %s,
+        |	EXTRACT(MONTH FROM event_time)
+    """.stripMargin
+    val monthlyTempViewDfs = columns.map(c => spark.sql(sqlMonthlyTempView.format(c, c, c)).persist())
+    val monthlyTempViewNames = columns.map(c => "monthly_%s".format(c))
+    monthlyTempViewDfs.indices.foreach(i => monthlyTempViewDfs(i).createOrReplaceTempView(monthlyTempViewNames(i)))
+
+    val sqlMonthly =
+      """
+        |SELECT
+        | purchase_count,
+        | %s,
+        | rank,
+        |	month
+        |FROM
+        |	(
+        |	SELECT
+        |		purchase_count, %s, month, RANK() OVER(PARTITION BY month
+        |	ORDER BY
+        |		purchase_count DESC) rank
+        |	FROM
+        |		%s) AS foo
+        |WHERE
+        |	rank <= %d
+    """.stripMargin
+    val monthlyDfs = columns.indices.map(i => spark
+      .sql(sqlMonthly.format(columns(i), columns(i), monthlyTempViewNames(i), topNums(i))))
+    monthlyDfs.indices.foreach(i => monthlyDfs(i)
+      .coalesce(1)
+      .write.csv("%s/mostPopular%sByMonth.csv".format(functionName, toCamel(columns(i)))))
+
+    val sqlTotal =
+      """
+        |SELECT
+        |	SUM(purchase_count) AS purchase_count,
+        |	%s
+        |FROM
+        |	%s
+        |GROUP BY
+        |	%s
+        |ORDER BY
+        | purchase_count DESC
+        |LIMIT %d
+      """.stripMargin
+
+    val totalDfs = columns.indices.map(i => spark.sql(sqlTotal.format(columns(i), monthlyTempViewNames(i), columns(i), topNums(i))))
+    totalDfs.indices.foreach(i => totalDfs(i)
+      .coalesce(1)
+      .write.csv("%s/mostPopular%s_%d.csv".format(functionName, toCamel(columns(i)), numsOfNulls(i))))
+  }
 
 }
