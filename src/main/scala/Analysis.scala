@@ -21,10 +21,10 @@ object Analysis {
 
     df.createOrReplaceTempView("ecommerce")
 
-    exploreTotalEventsEachDay(df)
+//    exploreTotalEvents(df)
     exploreUsersWithMaxEvents(df)
-    exploreMostActiveUsers(df)
-    exploreTurnoverPerDay(df)
+//    exploreMostActiveUsers(df)
+//    exploreTurnover(df)
   }
 
   def saveHistToFile(hist: (Array[Double], Array[Long]), filename: String): Unit = {
@@ -36,10 +36,10 @@ object Analysis {
   }
 
   /*
-  Total number of views, cart, remove_from_cart, purchase, all events of all users per day
+  Total number of views, cart, remove_from_cart, purchase, all events of all users per day & per month
    */
-  def exploreTotalEventsEachDay(df: DataFrame): Unit = {
-    val sql =
+  def exploreTotalEvents(df: DataFrame): Unit = {
+    val dailySql =
       """
         |SELECT
         |	SUM(CASE WHEN event_type = 'view' THEN 1 ELSE 0 END) AS num_views,
@@ -49,17 +49,17 @@ object Analysis {
         | COUNT(event_type) AS num_events,
         |	DATE(event_time) AS date
         |FROM
-        |	ecommerce e
+        |	ecommerce
         |GROUP BY
         |	DATE(event_time)
   """.stripMargin
-    val totalDf = spark.sql(sql)
+    val dailyDf = spark.sql(dailySql)
 
-    totalDf.coalesce(1).write.csv("exploreTotalEventsEachDay/eventsAggByDay.csv")
+    dailyDf.coalesce(1).write.csv("exploreTotalEvents/eventsAggByDay.csv")
 
     def computeAndSave(fieldIndex: Int, filename: String): Unit = {
       val bucketCount = 50
-      val columnData = totalDf.rdd.map(_.getLong(fieldIndex)).persist()
+      val columnData = dailyDf.rdd.map(_.getLong(fieldIndex)).persist()
       val maxNumEvents = columnData.max()
       val avgBinWidth = maxNumEvents / bucketCount
       val buckets = ((0.asInstanceOf[Long] until maxNumEvents by avgBinWidth) :+ maxNumEvents)
@@ -69,18 +69,37 @@ object Analysis {
       saveHistToFile((buckets, totalHist), filename)
     }
 
-    computeAndSave(0, "exploreTotalEventsEachDay/totalViewsHist.txt")
-    computeAndSave(1, "exploreTotalEventsEachDay/totalCartsHist.txt")
-    computeAndSave(2, "exploreTotalEventsEachDay/totalRemoveFromCartsHist.txt")
-    computeAndSave(3, "exploreTotalEventsEachDay/totalPurchasesHist.txt")
-    computeAndSave(4, "exploreTotalEventsEachDay/totalEventsHist.txt")
+    computeAndSave(0, "exploreTotalEvents/totalViewsHist.txt")
+    computeAndSave(1, "exploreTotalEvents/totalCartsHist.txt")
+    computeAndSave(2, "exploreTotalEvents/totalRemoveFromCartsHist.txt")
+    computeAndSave(3, "exploreTotalEvents/totalPurchasesHist.txt")
+    computeAndSave(4, "exploreTotalEvents/totalEventsHist.txt")
+
+    dailyDf.createOrReplaceTempView("agg_by_day")
+
+    val monthlySql =
+      """
+        |SELECT
+        |	SUM(num_views) AS num_views,
+        | SUM(num_carts) AS num_carts,
+        | SUM(num_remove_from_carts) AS num_remove_from_carts,
+        | SUM(num_purchases) AS num_purchases,
+        | SUM(num_events) AS num_events,
+        |	EXTRACT(MONTH FROM date) AS month
+        |FROM
+        |	agg_by_day
+        |GROUP BY
+        |	EXTRACT(MONTH FROM date)
+    """.stripMargin
+    val monthlyTurnoverDf = spark.sql(monthlySql)
+    monthlyTurnoverDf.coalesce(1).write.csv("exploreTotalEvents/eventsAggByMonth.csv")
   }
 
   /*
-  User with maximum number of views, cart, remove_from_cart, purchase, all events of each day
+  User with maximum number of views, cart, remove_from_cart, purchase, all events of each day & each month
    */
   def exploreUsersWithMaxEvents(df: DataFrame): Unit = {
-    val sqlTempView =
+    val sqlDailyTempView =
       """
         |SELECT
         |	SUM(CASE WHEN event_type = 'view' THEN 1 ELSE 0 END) AS num_views,
@@ -95,38 +114,66 @@ object Analysis {
         |GROUP BY
         | user_id,
         |	DATE(event_time)
-  """.stripMargin
-    val tempViewDf = spark.sql(sqlTempView)
-    tempViewDf.createOrReplaceTempView("daily_events")
+    """.stripMargin
+    val dailyTempViewDf = spark.sql(sqlDailyTempView)
+    dailyTempViewDf.createOrReplaceTempView("daily_events")
+
+    val sqlMonthlyTempView =
+      """
+        |SELECT
+        |	SUM(num_views) AS num_views,
+        | SUM(num_carts) AS num_carts,
+        | SUM(num_remove_from_carts) AS num_remove_from_carts,
+        | SUM(num_purchases) AS num_purchases,
+        | SUM(num_events) AS num_events,
+        | user_id,
+        |	EXTRACT(MONTH FROM date) AS month
+        |FROM
+        |	daily_events
+        |GROUP BY
+        | user_id,
+        |	EXTRACT(MONTH FROM date)
+    """.stripMargin
+    val monthlyTempViewDf = spark.sql(sqlMonthlyTempView)
+    monthlyTempViewDf.createOrReplaceTempView("monthly_events")
 
     val sqlTemplate =
       """
         |SELECT
         |	user_id,
-        |	date
+        | %s
+        |	%s
         |FROM
         |	(
         |	SELECT
-        |		user_id, date, RANK() OVER(PARTITION BY date
+        |		user_id, %s, %s, RANK() OVER(PARTITION BY %s
         |	ORDER BY
         |		%s DESC) rank
         |	FROM
-        |		daily_events) AS foo
+        |		%s) AS foo
         |WHERE
         |	rank = 1
     """.stripMargin
 
-    def computeAndSave(fieldName: String, filename: String): Unit = {
-      val sql = sqlTemplate.format(fieldName)
+    def computeAndSave(fieldName: String, filename: String, isDaily: Boolean): Unit = {
+      val sql =
+        if (isDaily) sqlTemplate.format(fieldName, "date", fieldName, "date", "date", fieldName, "daily_events")
+        else sqlTemplate.format(fieldName, "month", fieldName, "month", "month", fieldName, "monthly_events")
       val resultDf = spark.sql(sql)
       resultDf.coalesce(1).write.csv(filename)
     }
 
-    computeAndSave("num_views", "exploreUsersWithMaxEvents/topUserViewPerDayResult.csv")
-    computeAndSave("num_carts", "exploreUsersWithMaxEvents/topUserCartPerDayResult.csv")
-    computeAndSave("num_remove_from_carts", "exploreUsersWithMaxEvents/topUserRemoveFromCartPerDayResult.csv")
-    computeAndSave("num_purchases", "exploreUsersWithMaxEvents/topUserPurchasePerDayResult.csv")
-    computeAndSave("num_events", "exploreUsersWithMaxEvents/topUserEventPerDayResult.csv")
+    computeAndSave("num_views", "exploreUsersWithMaxEvents/topUserViewPerDayResult.csv", true)
+    computeAndSave("num_carts", "exploreUsersWithMaxEvents/topUserCartPerDayResult.csv", true)
+    computeAndSave("num_remove_from_carts", "exploreUsersWithMaxEvents/topUserRemoveFromCartPerDayResult.csv", true)
+    computeAndSave("num_purchases", "exploreUsersWithMaxEvents/topUserPurchasePerDayResult.csv", true)
+    computeAndSave("num_events", "exploreUsersWithMaxEvents/topUserEventPerDayResult.csv", true)
+
+    computeAndSave("num_views", "exploreUsersWithMaxEvents/topUserViewPerMonthResult.csv", false)
+    computeAndSave("num_carts", "exploreUsersWithMaxEvents/topUserCartPerMonthResult.csv", false)
+    computeAndSave("num_remove_from_carts", "exploreUsersWithMaxEvents/topUserRemoveFromCartPerMonthResult.csv", false)
+    computeAndSave("num_purchases", "exploreUsersWithMaxEvents/topUserPurchasePerMonthResult.csv", false)
+    computeAndSave("num_events", "exploreUsersWithMaxEvents/topUserEventPerMonthResult.csv", false)
 
   }
 
@@ -161,8 +208,11 @@ object Analysis {
     computeAndSave("num_events", "event_type", "exploreMostActiveUsers/topUserEventResult.csv")
   }
 
-  def exploreTurnoverPerDay(df: DataFrame): Unit = {
-    val sql =
+  /*
+  Explore daily and monthly turnovers
+   */
+  def exploreTurnover(df: DataFrame): Unit = {
+    val dailySql =
       """
         |SELECT
         |	SUM(price) AS turnover,
@@ -174,11 +224,26 @@ object Analysis {
         |GROUP BY
         |	DATE(event_time)
     """.stripMargin
-    val turnoverDf = spark.sql(sql)
+    val dailyTurnoverDf = spark.sql(dailySql)
 
-    turnoverDf.coalesce(1).write.csv("exploreTurnoverPerDay/turnoverAggByDay.csv")
-    val turnoverHist = turnoverDf.rdd.map(_.getDouble(0)).histogram(50)
-    saveHistToFile(turnoverHist, "exploreTurnoverPerDay/turnoverPerDayHist.txt")
+    dailyTurnoverDf.coalesce(1).write.csv("exploreTurnover/turnoverAggByDay.csv")
+    val turnoverHist = dailyTurnoverDf.rdd.map(_.getDouble(0)).histogram(50)
+    saveHistToFile(turnoverHist, "exploreTurnover/turnoverPerDayHist.txt")
+
+    dailyTurnoverDf.createOrReplaceTempView("agg_by_day")
+
+    val monthlySql =
+      """
+        |SELECT
+        |	SUM(turnover) AS turnover,
+        |	EXTRACT(MONTH FROM date) AS month
+        |FROM
+        |	agg_by_day
+        |GROUP BY
+        |	EXTRACT(MONTH FROM date)
+      """.stripMargin
+    val monthlyTurnoverDf = spark.sql(monthlySql)
+    monthlyTurnoverDf.coalesce(1).write.csv("exploreTurnover/turnoverAggByMonth.csv")
   }
 
 }
