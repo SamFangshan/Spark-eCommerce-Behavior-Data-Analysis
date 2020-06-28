@@ -1,43 +1,18 @@
 import java.io.{BufferedWriter, File, FileWriter}
 
 import com.google.common.base.CaseFormat
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, substring, to_timestamp}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
-object Analysis {
-  val spark: SparkSession =
-    SparkSession
-      .builder()
-      .master("local[*]")
-      .appName("eCommerceAnalysis")
-      .getOrCreate()
-
-  val sc: SparkContext = spark.sparkContext
+case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame) {
+  df.createOrReplaceTempView("ecommerce")
 
   val event_types = Array("view", "cart", "remove_from_cart", "purchase", "event")
 
-  def main(args: Array[String]): Unit = {
-    val df: DataFrame = spark.read.options(Map("header" -> "true", "inferSchema" -> "true")).csv("data/2019-Dec.csv")
-      .withColumn("event_time", substring(col("event_time"), 0, 19))
-      .withColumn("event_time", to_timestamp(col("event_time"), "yyyy-MM-dd HH:mm:ss"))
-
-    df.createOrReplaceTempView("ecommerce")
-
-//    exploreTotalEvents(df)
-//    exploreUsersWithMaxEvents(df)
-//    exploreMostActiveUsers(df)
-//    exploreTurnover(df)
-//    exploreUsersWithMaxSpending(df)
-//    exploreMostGenerousUsers(df)
-    explorePopularProducts(df)
-  }
-
-  def toCamel(s: String): String = {
+  private def toCamel(s: String): String = {
     CaseFormat.LOWER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, s)
   }
 
-  def saveHistToFile(hist: (Array[Double], Array[Long]), filename: String): Unit = {
+  private def saveHistToFile(hist: (Array[Double], Array[Long]), filename: String): Unit = {
     val file = new File(filename)
     val bw = new BufferedWriter(new FileWriter(file))
     bw.write(hist._1.mkString(",") + "\n")
@@ -46,9 +21,28 @@ object Analysis {
   }
 
   /*
+  Explore everything about events happened
+   */
+  def exploreEvents(): Unit = {
+    exploreTotalEvents(df)
+    exploreUsersWithMaxEvents(df)
+    exploreMostActiveUsers(df)
+  }
+
+  /*
+  Explore everything about purchases & purchased items
+   */
+  def explorePurchases(): Unit = {
+    exploreTurnover(df)
+    exploreUsersWithMaxSpending(df)
+    exploreMostGenerousUsers(df)
+    explorePopularProducts(df)
+  }
+
+  /*
   Total number of views, cart, remove_from_cart, purchase, all events of all users per day & per month & over the period
    */
-  def exploreTotalEvents(df: DataFrame): Unit = {
+  private def exploreTotalEvents(df: DataFrame): Unit = {
     val functionName = "exploreTotalEvents"
     val dailySumStatements = event_types.take(4).map(e => "SUM(CASE WHEN event_type = '%s' THEN 1 ELSE 0 END) AS num_%ss,\n".format(e, e))
     val dailySql =
@@ -102,7 +96,7 @@ object Analysis {
     monthlyDf.createOrReplaceTempView("agg_by_month")
 
     val totalSumStatements = event_types.take(4).map(e => "SUM(num_%ss) AS num_%ss,\n".format(e, e)) :+
-                               "SUM(num_%ss) AS num_%ss\n".format(event_types(4), event_types(4))
+      "SUM(num_%ss) AS num_%ss\n".format(event_types(4), event_types(4))
     val totalSql =
       """
         |SELECT
@@ -117,7 +111,7 @@ object Analysis {
   /*
   User with maximum number of views, cart, remove_from_cart, purchase, all events of each day & each month
    */
-  def exploreUsersWithMaxEvents(df: DataFrame): Unit = {
+  private def exploreUsersWithMaxEvents(df: DataFrame): Unit = {
     val functionName = "exploreUsersWithMaxEvents"
     val dailySumStatements = event_types.take(4).map(e => "SUM(CASE WHEN event_type = '%s' THEN 1 ELSE 0 END) AS num_%ss,\n".format(e, e))
     val sqlDailyTempView =
@@ -188,7 +182,7 @@ object Analysis {
   /*
   Users with top 10 numbers of views, cart, remove_from_cart, purchase, all events over the period
    */
-  def exploreMostActiveUsers(df: DataFrame): Unit = {
+  private def exploreMostActiveUsers(df: DataFrame): Unit = {
     val functionName = "exploreMostActiveUsers"
     val sqlTemplate =
       """
@@ -217,7 +211,7 @@ object Analysis {
   /*
   Explore daily, monthly & total turnovers
    */
-  def exploreTurnover(df: DataFrame): Unit = {
+  private def exploreTurnover(df: DataFrame): Unit = {
     val functionName = "exploreTurnover"
     val dailySql =
       """
@@ -271,7 +265,7 @@ object Analysis {
   /*
   Discover users with highest daily & monthly spending on this ecommerce site
    */
-  def exploreUsersWithMaxSpending(df: DataFrame): Unit = {
+  private def exploreUsersWithMaxSpending(df: DataFrame): Unit = {
     val functionName = "exploreUsersWithMaxSpending"
     val sqlDailyTempView =
       """
@@ -339,7 +333,7 @@ object Analysis {
   /*
   Users with top 10 spending over the period
    */
-  def exploreMostGenerousUsers(df: DataFrame): Unit = {
+  private def exploreMostGenerousUsers(df: DataFrame): Unit = {
     val functionName = "exploreMostGenerousUsers"
     val sql =
       """
@@ -364,7 +358,7 @@ object Analysis {
   /*
   Determine the mostly purchased popular products (top 50) & brands (top 20) & categories (top 10) per month & over the period
    */
-  def explorePopularProducts(df: DataFrame): Unit = {
+  private def explorePopularProducts(df: DataFrame): Unit = {
     val functionName = "explorePopularProducts"
     val columns = Array("product_id", "brand", "category_code")
     val topNums = Array(50, 20, 10)
@@ -441,5 +435,4 @@ object Analysis {
       .coalesce(1)
       .write.csv("%s/mostPopular%s_%d.csv".format(functionName, toCamel(columns(i)), numsOfNulls(i))))
   }
-
 }
