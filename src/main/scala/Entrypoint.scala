@@ -12,7 +12,12 @@ object Entrypoint {
         .getOrCreate()
 
     // prepare spark dataframe
-    val df: DataFrame = spark.read.options(Map("header" -> "true", "inferSchema" -> "true")).csv("data/2019-Dec.csv")
+    val filenames = Array("2019-Oct.csv", "2019-Nov.csv", "2019-Dec.csv",
+      "2020-Jan.csv", "2020-Feb.csv", "2020-Mar.csv", "2020-Apr.csv")
+    val dfs = filenames.map(f => spark
+                              .read
+                              .options(Map("header" -> "true", "inferSchema" -> "true")).csv("data/%s".format(f)))
+    val df = dfs.reduce(_.union(_))
       .withColumn("event_time", substring(col("event_time"), 0, 19))
       .withColumn("event_time", to_timestamp(col("event_time"), "yyyy-MM-dd HH:mm:ss"))
 
