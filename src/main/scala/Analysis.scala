@@ -164,7 +164,7 @@ object Analysis {
   }
 
   /*
-  Users with top 5 numbers of views, cart, remove_from_cart, purchase, all events over the period
+  Users with top 10 numbers of views, cart, remove_from_cart, purchase, all events over the period
    */
   def exploreMostActiveUsers(df: DataFrame): Unit = {
     val functionName = "exploreMostActiveUsers"
@@ -230,5 +230,98 @@ object Analysis {
     val monthlyTurnoverDf = spark.sql(monthlySql)
     monthlyTurnoverDf.coalesce(1).write.csv("%s/turnoverAggByMonth.csv".format(functionName))
   }
+
+  /*
+  Discover users with highest daily & monthly spending on this ecommerce site
+   */
+  def exploreUsersWithMaxSpending(df: DataFrame): Unit = {
+    val functionName = "exploreUsersWithMaxSpending"
+    val sqlDailyTempView =
+      """
+        |SELECT
+        | SUM(price) AS spending,
+        | user_id,
+        |	DATE(event_time) AS date
+        |FROM
+        |	ecommerce
+        |WHERE
+        |	event_type = 'purchase'
+        |GROUP BY
+        | user_id,
+        |	DATE(event_time)
+    """.stripMargin
+    val dailyTempViewDf = spark.sql(sqlDailyTempView)
+    dailyTempViewDf.createOrReplaceTempView("daily_spending")
+
+    val sqlMonthlyTempView =
+      """
+        |SELECT
+        |	SUM(spending) AS spending,
+        | user_id,
+        |	EXTRACT(MONTH FROM date) AS month
+        |FROM
+        |	daily_spending
+        |GROUP BY
+        | user_id,
+        |	EXTRACT(MONTH FROM date)
+    """.stripMargin
+    val monthlyTempViewDf = spark.sql(sqlMonthlyTempView)
+    monthlyTempViewDf.createOrReplaceTempView("monthly_spending")
+
+    val sqlTemplate =
+      """
+        |SELECT
+        |	user_id,
+        | spending,
+        |	%s
+        |FROM
+        |	(
+        |	SELECT
+        |		user_id, spending, %s, RANK() OVER(PARTITION BY %s
+        |	ORDER BY
+        |		spending DESC) rank
+        |	FROM
+        |		%s) AS foo
+        |WHERE
+        |	rank = 1
+    """.stripMargin
+
+    def computeAndSave(filename: String, isDaily: Boolean): Unit = {
+      val sql =
+        if (isDaily) sqlTemplate.format("date", "date", "date", "daily_spending")
+        else sqlTemplate.format("month", "month", "month", "monthly_spending")
+      val resultDf = spark.sql(sql)
+      resultDf.coalesce(1).write.csv(filename)
+    }
+
+    computeAndSave("%s/topUserSpendingPerDayResult.csv".format(functionName), true)
+    computeAndSave("%s/topUserSpendingPerMonthResult.csv".format(functionName), false)
+  }
+
+  /*
+  Users with top 10 spending over the period
+   */
+  def exploreMostGenerousUsers(df: DataFrame): Unit = {
+    val functionName = "exploreMostGenerousUsers"
+    val sql =
+      """
+        |SELECT
+        |	SUM(price) AS spending,
+        |	user_id
+        |FROM
+        |	ecommerce
+        |WHERE
+        |	event_type = 'purchase'
+        |GROUP BY
+        |	user_id
+        |ORDER BY
+        |	spending DESC
+        |LIMIT 10
+    """.stripMargin
+
+    val resultDf = spark.sql(sql)
+    resultDf.coalesce(1).write.csv("%s/topUserSpendingResult.csv".format(functionName))
+  }
+
 
 }
