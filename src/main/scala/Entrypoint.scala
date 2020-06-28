@@ -19,7 +19,7 @@ object Entrypoint {
                               .options(Map("header" -> "true", "inferSchema" -> "true")).csv("data/%s".format(f)))
     val df = dfs.reduce(_.union(_))
       .withColumn("event_time", substring(col("event_time"), 0, 19))
-      .withColumn("event_time", to_timestamp(col("event_time"), "yyyy-MM-dd HH:mm:ss"))
+      .withColumn("event_time", to_timestamp(col("event_time"), "yyyy-MM-dd HH:mm:ss")).persist()
 
     // exploratory analysis
     val analyzer = ExploratoryAnalyzer(spark, df)
