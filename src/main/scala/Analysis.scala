@@ -25,9 +25,11 @@ object Analysis {
     df.createOrReplaceTempView("ecommerce")
 
     exploreTotalEvents(df)
-    exploreUsersWithMaxEvents(df)
-    exploreMostActiveUsers(df)
+//    exploreUsersWithMaxEvents(df)
+//    exploreMostActiveUsers(df)
     exploreTurnover(df)
+//    exploreUsersWithMaxSpending(df)
+//    exploreMostGenerousUsers(df)
   }
 
   def toCamel(s: String): String = {
@@ -43,7 +45,7 @@ object Analysis {
   }
 
   /*
-  Total number of views, cart, remove_from_cart, purchase, all events of all users per day & per month
+  Total number of views, cart, remove_from_cart, purchase, all events of all users per day & per month & over the period
    */
   def exploreTotalEvents(df: DataFrame): Unit = {
     val functionName = "exploreTotalEvents"
@@ -90,8 +92,22 @@ object Analysis {
         |GROUP BY
         |	EXTRACT(MONTH FROM date)
     """.stripMargin.format(monthlySumStatements.mkString(""))
-    val monthlyTurnoverDf = spark.sql(monthlySql)
-    monthlyTurnoverDf.coalesce(1).write.csv("%s/eventsAggByMonth.csv".format(functionName))
+    val monthlyDf = spark.sql(monthlySql)
+    monthlyDf.coalesce(1).write.csv("%s/eventsAggByMonth.csv".format(functionName))
+
+    monthlyDf.createOrReplaceTempView("agg_by_month")
+
+    val totalSumStatements = event_types.take(4).map(e => "SUM(num_%ss) AS num_%ss,\n".format(e, e)) :+
+                               "SUM(num_%ss) AS num_%ss\n".format(event_types(4), event_types(4))
+    val totalSql =
+      """
+        |SELECT
+        |	%s
+        |FROM
+        |	agg_by_month
+      """.stripMargin.format(totalSumStatements.mkString(""))
+    val totalDf = spark.sql(totalSql)
+    totalDf.coalesce(1).write.csv("%s/eventsAgg.csv".format(functionName))
   }
 
   /*
@@ -193,7 +209,7 @@ object Analysis {
   }
 
   /*
-  Explore daily and monthly turnovers
+  Explore daily, monthly & total turnovers
    */
   def exploreTurnover(df: DataFrame): Unit = {
     val functionName = "exploreTurnover"
@@ -229,6 +245,18 @@ object Analysis {
       """.stripMargin
     val monthlyTurnoverDf = spark.sql(monthlySql)
     monthlyTurnoverDf.coalesce(1).write.csv("%s/turnoverAggByMonth.csv".format(functionName))
+
+    monthlyTurnoverDf.createOrReplaceTempView("agg_by_month")
+
+    val totalTurnoverSql =
+      """
+        |SELECT
+        |	SUM(turnover) AS turnover
+        |FROM
+        |	agg_by_month
+      """.stripMargin
+    val totalTurnoverDf = spark.sql(totalTurnoverSql)
+    totalTurnoverDf.coalesce(1).write.csv("%s/turnoverAgg.csv".format(functionName))
   }
 
   /*
