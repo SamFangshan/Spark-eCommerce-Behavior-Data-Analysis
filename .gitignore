@@ -1,5 +1,6 @@
 .idea/
 /target/
 /project/target/
+/project/project/
 /data/
 /src/main/scala/*.sc
