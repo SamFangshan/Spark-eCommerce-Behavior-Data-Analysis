@@ -93,11 +93,11 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
       """
         |SELECT
         |	%s
-        |	EXTRACT(MONTH FROM date) AS month
+        |	DATE_FORMAT(date, 'yyyy-MM') AS month
         |FROM
         |	agg_by_day
         |GROUP BY
-        |	EXTRACT(MONTH FROM date)
+        |	DATE_FORMAT(date, 'yyyy-MM')
     """.stripMargin.format(monthlySumStatements.mkString(""))
     val monthlyDf = spark.sql(monthlySql)
     monthlyDf.persist()
@@ -150,12 +150,12 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         |SELECT
         |	%s
         | user_id,
-        |	EXTRACT(MONTH FROM date) AS month
+        |	DATE_FORMAT(date, 'yyyy-MM') AS month
         |FROM
         |	daily_events
         |GROUP BY
         | user_id,
-        |	EXTRACT(MONTH FROM date)
+        |	DATE_FORMAT(date, 'yyyy-MM')
     """.stripMargin.format(monthlySumStatements.mkString(""))
     val monthlyTempViewDf = spark.sql(sqlMonthlyTempView)
     monthlyTempViewDf.persist()
@@ -265,11 +265,11 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
       """
         |SELECT
         |	SUM(turnover) AS turnover,
-        |	EXTRACT(MONTH FROM date) AS month
+        |	DATE_FORMAT(date, 'yyyy-MM') AS month
         |FROM
         |	agg_by_day
         |GROUP BY
-        |	EXTRACT(MONTH FROM date)
+        |	DATE_FORMAT(date, 'yyyy-MM')
       """.stripMargin
     val monthlyTurnoverDf = spark.sql(monthlySql)
     monthlyTurnoverDf.persist()
@@ -317,12 +317,12 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         |SELECT
         |	SUM(spending) AS spending,
         | user_id,
-        |	EXTRACT(MONTH FROM date) AS month
+        |	DATE_FORMAT(date, 'yyyy-MM') AS month
         |FROM
         |	daily_spending
         |GROUP BY
         | user_id,
-        |	EXTRACT(MONTH FROM date)
+        |	DATE_FORMAT(date, 'yyyy-MM')
     """.stripMargin
     val monthlyTempViewDf = spark.sql(sqlMonthlyTempView)
     monthlyTempViewDf.createOrReplaceTempView("monthly_spending")
@@ -405,7 +405,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         |SELECT
         |	COUNT(product_id) AS purchase_count,
         |	%s,
-        |	EXTRACT(MONTH FROM event_time) AS MONTH
+        |	DATE_FORMAT(event_time, 'yyyy-MM') AS MONTH
         |FROM
         |	ecommerce
         |WHERE
@@ -413,7 +413,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         |	AND %s IS NOT NULL
         |GROUP BY
         | %s,
-        |	EXTRACT(MONTH FROM event_time)
+        |	DATE_FORMAT(event_time, 'yyyy-MM')
     """.stripMargin
     val monthlyTempViewDfs = columns.map(c => spark.sql(sqlMonthlyTempView.format(c, c, c)).persist())
     val monthlyTempViewNames = columns.map(c => "monthly_%s".format(c))
