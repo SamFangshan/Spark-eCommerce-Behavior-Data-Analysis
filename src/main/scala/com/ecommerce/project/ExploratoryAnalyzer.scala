@@ -66,7 +66,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
     val dailyDf = spark.sql(dailySql)
     dailyDf.persist()
 
-    dailyDf.coalesce(1).write.csv("gs://%s/%s/eventsAggByDay.csv".format(bucketName, functionName))
+    dailyDf.write.csv("gs://%s/%s/eventsAggByDay.csv".format(bucketName, functionName))
 
     def computeAndSave(fieldIndex: Int, filename: String): Unit = {
       val bucketCount = 20
@@ -102,7 +102,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
     val monthlyDf = spark.sql(monthlySql)
     monthlyDf.persist()
 
-    monthlyDf.coalesce(1).write.csv("gs://%s/%s/eventsAggByMonth.csv".format(bucketName, functionName))
+    monthlyDf.write.csv("gs://%s/%s/eventsAggByMonth.csv".format(bucketName, functionName))
 
     monthlyDf.createOrReplaceTempView("agg_by_month")
 
@@ -116,7 +116,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         |	agg_by_month
       """.stripMargin.format(totalSumStatements.mkString(""))
     val totalDf = spark.sql(totalSql)
-    totalDf.coalesce(1).write.csv("gs://%s/%s/eventsAgg.csv".format(bucketName, functionName))
+    totalDf.write.csv("gs://%s/%s/eventsAgg.csv".format(bucketName, functionName))
   }
 
   /*
@@ -184,7 +184,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         if (isDaily) sqlTemplate.format(fieldName, "date", fieldName, "date", "date", fieldName, "daily_events")
         else sqlTemplate.format(fieldName, "month", fieldName, "month", "month", fieldName, "monthly_events")
       val resultDf = spark.sql(sql)
-      resultDf.coalesce(1).write.csv(filename)
+      resultDf.write.csv(filename)
     }
 
     event_types.foreach(e => computeAndSave(
@@ -220,7 +220,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
     def computeAndSave(fieldName: String, fieldValue: String, filename: String): Unit = {
       val sql = sqlTemplate.format(fieldValue, fieldName, fieldName)
       val resultDf = spark.sql(sql)
-      resultDf.coalesce(1).write.csv(filename)
+      resultDf.write.csv(filename)
     }
 
     event_types.take(4).foreach(e => computeAndSave(
@@ -255,7 +255,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
     val dailyTurnoverDf = spark.sql(dailySql)
     dailyTurnoverDf.persist()
 
-    dailyTurnoverDf.coalesce(1).write.csv("gs://%s/%s/turnoverAggByDay.csv".format(bucketName, functionName))
+    dailyTurnoverDf.write.csv("gs://%s/%s/turnoverAggByDay.csv".format(bucketName, functionName))
     val turnoverHist = dailyTurnoverDf.rdd.map(_.getDouble(0)).histogram(20)
     saveHistToFile(turnoverHist, "gs://%s/%s/turnoverPerDayHist.txt".format(bucketName, functionName))
 
@@ -274,7 +274,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
     val monthlyTurnoverDf = spark.sql(monthlySql)
     monthlyTurnoverDf.persist()
 
-    monthlyTurnoverDf.coalesce(1).write.csv("gs://%s/%s/turnoverAggByMonth.csv".format(bucketName, functionName))
+    monthlyTurnoverDf.write.csv("gs://%s/%s/turnoverAggByMonth.csv".format(bucketName, functionName))
 
     monthlyTurnoverDf.createOrReplaceTempView("agg_by_month")
 
@@ -286,7 +286,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         |	agg_by_month
       """.stripMargin
     val totalTurnoverDf = spark.sql(totalTurnoverSql)
-    totalTurnoverDf.coalesce(1).write.csv("gs://%s/%s/turnoverAgg.csv".format(bucketName, functionName))
+    totalTurnoverDf.write.csv("gs://%s/%s/turnoverAgg.csv".format(bucketName, functionName))
   }
 
   /*
@@ -350,7 +350,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
         if (isDaily) sqlTemplate.format("date", "date", "date", "daily_spending")
         else sqlTemplate.format("month", "month", "month", "monthly_spending")
       val resultDf = spark.sql(sql)
-      resultDf.coalesce(1).write.csv(filename)
+      resultDf.write.csv(filename)
     }
 
     computeAndSave("gs://%s/%s/topUserSpendingPerDayResult.csv".format(bucketName, functionName), true)
@@ -379,7 +379,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
     """.stripMargin
 
     val resultDf = spark.sql(sql)
-    resultDf.coalesce(1).write.csv("gs://%s/%s/topUserSpendingResult.csv".format(bucketName, functionName))
+    resultDf.write.csv("gs://%s/%s/topUserSpendingResult.csv".format(bucketName, functionName))
   }
 
   /*
@@ -440,7 +440,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
     val monthlyDfs = columns.indices.map(i => spark
       .sql(sqlMonthly.format(columns(i), columns(i), monthlyTempViewNames(i), topNums(i))))
     monthlyDfs.indices.foreach(i => monthlyDfs(i)
-      .coalesce(1)
+
       .write.csv("gs://%s/%s/mostPopular%sByMonth.csv".format(bucketName, functionName, toCamel(columns(i)))))
 
     val sqlTotal =
@@ -461,7 +461,7 @@ case class ExploratoryAnalyzer(spark: SparkSession, df: DataFrame, bucketName: S
       .indices
       .map(i => spark.sql(sqlTotal.format(columns(i), monthlyTempViewNames(i), columns(i), topNums(i))))
     totalDfs.indices.foreach(i => totalDfs(i)
-      .coalesce(1)
+
       .write.csv("gs://%s/%s/mostPopular%s_%d.csv".format(bucketName, functionName, toCamel(columns(i)), numsOfNulls(i))))
   }
 }
