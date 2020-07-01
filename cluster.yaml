@@ -3,12 +3,12 @@ config:
   endpointConfig:
     enableHttpPortAccess: true
     httpPorts:
-      HDFS NameNode: https://ynaqozxmq5efdn5ln4dlit25iy-dot-asia-southeast1.dataproc.googleusercontent.com/hdfs/dfshealth.html
-      MapReduce Job History: https://ynaqozxmq5efdn5ln4dlit25iy-dot-asia-southeast1.dataproc.googleusercontent.com/jobhistory/
-      Spark History Server: https://ynaqozxmq5efdn5ln4dlit25iy-dot-asia-southeast1.dataproc.googleusercontent.com/sparkhistory/
-      Tez: https://ynaqozxmq5efdn5ln4dlit25iy-dot-asia-southeast1.dataproc.googleusercontent.com/apphistory/tez-ui/
-      YARN Application Timeline: https://ynaqozxmq5efdn5ln4dlit25iy-dot-asia-southeast1.dataproc.googleusercontent.com/apphistory/
-      YARN ResourceManager: https://ynaqozxmq5efdn5ln4dlit25iy-dot-asia-southeast1.dataproc.googleusercontent.com/yarn/
+      HDFS NameNode: https://nrgfdai2ufh3vkpfd4dkbwtsoe-dot-asia-southeast1.dataproc.googleusercontent.com/hdfs/dfshealth.html
+      MapReduce Job History: https://nrgfdai2ufh3vkpfd4dkbwtsoe-dot-asia-southeast1.dataproc.googleusercontent.com/jobhistory/
+      Spark History Server: https://nrgfdai2ufh3vkpfd4dkbwtsoe-dot-asia-southeast1.dataproc.googleusercontent.com/sparkhistory/
+      Tez: https://nrgfdai2ufh3vkpfd4dkbwtsoe-dot-asia-southeast1.dataproc.googleusercontent.com/apphistory/tez-ui/
+      YARN Application Timeline: https://nrgfdai2ufh3vkpfd4dkbwtsoe-dot-asia-southeast1.dataproc.googleusercontent.com/apphistory/
+      YARN ResourceManager: https://nrgfdai2ufh3vkpfd4dkbwtsoe-dot-asia-southeast1.dataproc.googleusercontent.com/yarn/
   gceClusterConfig:
     serviceAccountScopes:
     - https://www.googleapis.com/auth/bigquery
@@ -19,18 +19,18 @@ config:
     - https://www.googleapis.com/auth/devstorage.read_write
     - https://www.googleapis.com/auth/logging.write
     subnetworkUri: https://www.googleapis.com/compute/v1/projects/refined-cortex-277503/regions/asia-southeast1/subnetworks/default
-    zoneUri: https://www.googleapis.com/compute/v1/projects/refined-cortex-277503/zones/asia-southeast1-c
+    zoneUri: https://www.googleapis.com/compute/v1/projects/refined-cortex-277503/zones/asia-southeast1-b
   masterConfig:
     diskConfig:
       bootDiskSizeGb: 100
       bootDiskType: pd-standard
-    imageUri: https://www.googleapis.com/compute/v1/projects/cloud-dataproc/global/images/dataproc-1-3-deb9-20200618-113950-rc01
-    machineTypeUri: https://www.googleapis.com/compute/v1/projects/refined-cortex-277503/zones/asia-southeast1-c/machineTypes/n1-standard-2
+    imageUri: https://www.googleapis.com/compute/v1/projects/cloud-dataproc/global/images/dataproc-1-3-deb9-20200611-082319-rc02
+    machineTypeUri: https://www.googleapis.com/compute/v1/projects/refined-cortex-277503/zones/asia-southeast1-b/machineTypes/n1-standard-2
     minCpuPlatform: AUTOMATIC
     numInstances: 1
     preemptibility: NON_PREEMPTIBLE
   softwareConfig:
-    imageVersion: 1.3.61-debian9
+    imageVersion: 1.3.60-debian9
     properties:
       capacity-scheduler:yarn.scheduler.capacity.root.default.ordering-policy: fair
       core:fs.gs.block.size: '134217728'
@@ -55,39 +55,39 @@ config:
       mapred:mapreduce.job.reduce.slowstart.completedmaps: '0.95'
       mapred:mapreduce.job.reduces: '8'
       mapred:mapreduce.map.cpu.vcores: '1'
-      mapred:mapreduce.map.java.opts: -Xmx2457m
-      mapred:mapreduce.map.memory.mb: '3072'
+      mapred:mapreduce.map.java.opts: -Xmx6553m
+      mapred:mapreduce.map.memory.mb: '8192'
       mapred:mapreduce.reduce.cpu.vcores: '1'
-      mapred:mapreduce.reduce.java.opts: -Xmx2457m
-      mapred:mapreduce.reduce.memory.mb: '3072'
+      mapred:mapreduce.reduce.java.opts: -Xmx6553m
+      mapred:mapreduce.reduce.memory.mb: '8192'
       mapred:mapreduce.task.io.sort.mb: '256'
-      mapred:yarn.app.mapreduce.am.command-opts: -Xmx2457m
+      mapred:yarn.app.mapreduce.am.command-opts: -Xmx6553m
       mapred:yarn.app.mapreduce.am.resource.cpu-vcores: '1'
-      mapred:yarn.app.mapreduce.am.resource.mb: '3072'
+      mapred:yarn.app.mapreduce.am.resource.mb: '8192'
       spark-env:SPARK_DAEMON_MEMORY: 1920m
       spark:spark.driver.maxResultSize: 960m
       spark:spark.driver.memory: 1920m
       spark:spark.executor.cores: '1'
       spark:spark.executor.instances: '2'
-      spark:spark.executor.memory: 3712m
+      spark:spark.executor.memory: 11171m
       spark:spark.executorEnv.OPENBLAS_NUM_THREADS: '1'
       spark:spark.scheduler.mode: FAIR
       spark:spark.sql.cbo.enabled: 'true'
       spark:spark.yarn.am.memory: 640m
-      yarn-env:YARN_NODEMANAGER_HEAPSIZE: '3328'
+      yarn-env:YARN_NODEMANAGER_HEAPSIZE: '4000'
       yarn-env:YARN_RESOURCEMANAGER_HEAPSIZE: '1920'
       yarn-env:YARN_TIMELINESERVER_HEAPSIZE: '1920'
-      yarn:yarn.nodemanager.resource.memory-mb: '9216'
+      yarn:yarn.nodemanager.resource.memory-mb: '24576'
       yarn:yarn.resourcemanager.nodemanager-graceful-decommission-timeout-secs: '86400'
-      yarn:yarn.scheduler.maximum-allocation-mb: '9216'
+      yarn:yarn.scheduler.maximum-allocation-mb: '24576'
       yarn:yarn.scheduler.minimum-allocation-mb: '1024'
   tempBucket: dataproc-temp-asia-southeast1-729266915227-afiuio5p
   workerConfig:
     diskConfig:
-      bootDiskSizeGb: 500
+      bootDiskSizeGb: 50
       bootDiskType: pd-standard
-    imageUri: https://www.googleapis.com/compute/v1/projects/cloud-dataproc/global/images/dataproc-1-3-deb9-20200618-113950-rc01
-    machineTypeUri: https://www.googleapis.com/compute/v1/projects/refined-cortex-277503/zones/asia-southeast1-c/machineTypes/n1-highmem-2
+    imageUri: https://www.googleapis.com/compute/v1/projects/cloud-dataproc/global/images/dataproc-1-3-deb9-20200611-082319-rc02
+    machineTypeUri: https://www.googleapis.com/compute/v1/projects/refined-cortex-277503/zones/asia-southeast1-b/machineTypes/custom-2-30720-ext
     minCpuPlatform: AUTOMATIC
     numInstances: 3
     preemptibility: NON_PREEMPTIBLE
