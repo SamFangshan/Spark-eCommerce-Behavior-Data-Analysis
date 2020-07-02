@@ -5,3 +5,8 @@
 /project/project/
 /data/
 /src/main/scala/*.sc
+/output/*
+!/output/readme.md
+/env/
+/notebook/.ipynb_checkpoints
+**/__pycache__/
